@@ -1,0 +1,142 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>The List</title>
+</head>
+<body>
+    <h1>The List</h1>
+
+    <h2>Add Item</h2>
+
+    <input id="nameInput" placeholder="Item name">
+    <input id="quantityInput" placeholder="Quantity">
+    <input id="categoryInput" placeholder="Category">
+
+    <select id="statusInput">
+        <option value="needed">needed</option>
+        <option value="in_stock">in_stock</option>
+        <option value="running_low">running_low</option>
+        <option value="bought">bought</option>
+    </select>
+
+    <button onclick="addItem()">Add Item</button>
+
+    <h2>Items</h2>
+
+    <ul id="itemsList"></ul>
+
+    <script>
+        async function loadItems() {
+            const response = await fetch("/items");
+            const data = await response.json();
+
+            const itemsList = document.getElementById("itemsList");
+            itemsList.innerHTML = "";
+
+            for (const item of data.items) {
+                const listItem = document.createElement("li");
+
+                listItem.innerHTML = `
+                        <strong>${item.name}</strong>
+                        - Category: ${item.category}
+                        <br>
+
+                        Quantity:
+                        <input id="quantity-${item.id}" value="${item.quantity}">
+                        <button onclick="updateQuantity(${item.id})">Save Quantity</button>
+
+                        <br>
+
+                        Status:
+                        <select id="status-${item.id}">
+                            <option value="needed" ${item.status === "needed" ? "selected" : ""}>needed</option>
+                            <option value="in_stock" ${item.status === "in_stock" ? "selected" : ""}>in_stock</option>
+                            <option value="running_low" ${item.status === "running_low" ? "selected" : ""}>running_low</option>
+                            <option value="bought" ${item.status === "bought" ? "selected" : ""}>bought</option>
+                        </select>
+
+                        <button onclick="updateStatus(${item.id})">Save Status</button>
+                        <button onclick="deleteItem(${item.id})">Delete</button>
+                    `;
+
+                itemsList.appendChild(listItem);
+            }
+        }
+
+        async function addItem() {
+            const name = document.getElementById("nameInput").value;
+            const quantity = document.getElementById("quantityInput").value;
+            const category = document.getElementById("categoryInput").value;
+            const status = document.getElementById("statusInput").value;
+
+            if (name === "") {
+                alert("Item name is required.");
+                return;
+            }
+
+            await fetch("/items", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    name: name,
+                    quantity: quantity,
+                    category: category,
+                    status: status
+                })
+            });
+
+            document.getElementById("nameInput").value = "";
+            document.getElementById("quantityInput").value = "";
+            document.getElementById("categoryInput").value = "";
+
+            loadItems();
+        }
+
+        async function updateQuantity(id) {
+            const quantityInput = document.getElementById(`quantity-${id}`);
+            const newQuantity = quantityInput.value;
+
+            await fetch(`/items/${id}/quantity`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    quantity: newQuantity
+                })
+            });
+
+            loadItems();
+        }
+
+        async function updateStatus(id) {
+            const statusDropdown = document.getElementById(`status-${id}`);
+            const newStatus = statusDropdown.value;
+
+            await fetch(`/items/${id}/status`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    status: newStatus
+                })
+            });
+
+            loadItems();
+        }
+
+        async function deleteItem(id) {
+            await fetch(`/items/${id}`, {
+                method: "DELETE"
+            });
+
+            loadItems();
+        }
+
+        loadItems();
+    </script>
+</body>
+</html>
