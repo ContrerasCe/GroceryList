@@ -3,12 +3,10 @@
 
 #pragma once
 
-#include <algorithm>
-#include <mutex>
+
 #include <string>
 #include <vector>
-#include <fstream>
-#include <iostream>
+#include <crow.h>
 
 struct Item {
     int id;
@@ -18,7 +16,9 @@ struct Item {
     std::string status;
 };
 
-crow::json::wvalue itemToJson(const Item& item);
 
+crow::json::wvalue itemToJson(const Item& item);
+void addCorsHeaders(crow::response& response);
 void saveItemsToFile(const std::string& fileName, const std::vector<Item>& items);
 void loadItemsFromFile(const std::string& fileName, std::vector<Item>& items, int& nextId);
+bool isReadOnlyMode(int argc, char* argv[]);
