@@ -2,6 +2,89 @@
 <html>
 <head>
     <title>The List</title>
+
+    <!--CSS card testing learning stuff-->
+    <style>
+        body {
+            font-family: "Segoe Print", "Comic Sans MS", cursive;
+            margin: 0;
+            padding: 40px;
+            padding-left: 115px;
+            background-color: #fffdf3;
+            background-image: linear-gradient(#d8e8ff 1px, transparent 1px);
+            background-size: 100% 32px, 80px 100%;
+            background-position: 0 0, 80px 0;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            left: 80px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #ff9a9a;
+            pointer-events: none;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+            padding-top: 9px;
+            font-size: 55px;
+        }
+
+        h2 {
+            margin-left: 20px;
+        }
+
+        .add-section {
+            background: white;
+            padding: 16px;
+            margin: 20px;
+            max-width: 700px;
+            border-radius: 8px;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .cards-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .item-card {
+            background: #fff176;
+            width: 230px;
+            min-height: 190px;
+            padding: 18px;
+            box-shadow: 4px 6px 10px rgba(0, 0, 0, 0.25);
+            transform: rotate(-1deg);
+            border-radius: 3px;
+        }
+
+            .item-card:nth-child(even) {
+                transform: rotate(1.5deg);
+            }
+
+            .item-card h3 {
+                margin-top: 0;
+            }
+
+            .item-card input,
+            .item-card select {
+                width: 100%;
+                box-sizing: border-box;
+                margin: 4px 0 8px 0;
+            }
+
+            .item-card button {
+                margin-top: 6px;
+                margin-right: 4px;
+                cursor: pointer;
+            }
+    </style>
 </head>
 <body>
     <h1>The List</h1>
@@ -23,7 +106,7 @@
 
     <h2>Items</h2>
 
-    <ul id="itemsList"></ul>
+    <div id="itemsList" class="cards-container"></div>
 
     <script>
         async function loadItems() {
@@ -34,9 +117,10 @@
             itemsList.innerHTML = "";
 
             for (const item of data.items) {
-                const listItem = document.createElement("li");
+                const itemCard = document.createElement("div");
+                itemCard.className = "item-card";
 
-                listItem.innerHTML = `
+                itemCard.innerHTML =                `
                         <strong>${item.name}</strong>
                         - Category: ${item.category}
                         <br>
@@ -59,7 +143,7 @@
                         <button onclick="deleteItem(${item.id})">Delete</button>
                     `;
 
-                itemsList.appendChild(listItem);
+                itemsList.appendChild(itemCard);
             }
         }
 
