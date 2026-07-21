@@ -1,26 +1,21 @@
 ﻿#include <crow.h>
 #include "thelistbackend.h"
 #include <crow/middlewares/cors.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <algorithm>
+#include <mutex>
 
 #ifdef DELETE //windows delete method bugfix
 #undef DELETE
 #endif
-
-#include <algorithm>
-#include <mutex>
-#include <string>
-#include <vector>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-
 
 void addCorsHeaders(crow::response& response) {
     response.set_header("Access-Control-Allow-Origin", "*");
     response.set_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
     response.set_header("Access-Control-Allow-Headers", "Content-Type");
 }
-
 
 crow::json::wvalue itemToJson(const Item& item) {
     crow::json::wvalue json;
@@ -33,9 +28,6 @@ crow::json::wvalue itemToJson(const Item& item) {
 
     return json;
 }
-
-// Saves our items to a json file for storage
-// Currently only allows for a chosen list
 
 void saveItemsToFile(const std::string& fileName, const std::vector<Item>& items) {
     crow::json::wvalue root; //crow json type
@@ -59,9 +51,6 @@ void saveItemsToFile(const std::string& fileName, const std::vector<Item>& items
 
     file.close();
 }
-
-// File opening logic
-// File takes precedence so we delete whatever we have stored and prio the save.
 
 void loadItemsFromFile(const std::string& fileName, std::vector<Item>& items, int& nextId) {
     std::ifstream file(fileName);
@@ -123,7 +112,27 @@ std::string readTextFile(const std::string& fileName) {std::ifstream file(fileNa
     return buffer.str();
 }
 
-int main() {
+bool isReadOnlyMode(int argc, char* argv[]) {
+    for (int i = 1; argc > i; i++) {
+        std::string argument = argv[i];
+
+        if (argument == "--public") {
+            return true;
+        }
+    }
+
+    return false;
+
+}
+
+int main(int argc, char* argv[]) {
+
+    bool readOnlyMode = isReadOnlyMode(argc, argv);
+    int portNumber = 8080;
+    if (readOnlyMode) {
+        portNumber = 8081;
+    }
+
     crow::App<crow::CORSHandler> app;
     std::vector<Item> items;
     std::mutex itemsMutex;
@@ -158,8 +167,12 @@ int main() {
  
 
     CROW_ROUTE(app, "/items").methods(crow::HTTPMethod::GET)
-        ([&items, &itemsMutex]() {
+        ([&items, &itemsMutex, &fileName, &nextId, readOnlyMode]() {
         std::lock_guard<std::mutex> lock(itemsMutex);
+
+        if (readOnlyMode) {
+            loadItemsFromFile(fileName, items, nextId);
+        }
 
         crow::json::wvalue jsonResponse;
         jsonResponse["items"] = crow::json::wvalue::list();
@@ -178,145 +191,148 @@ int main() {
         return response;
             });
     
-    CROW_ROUTE(app, "/items").methods(crow::HTTPMethod::POST)([&items, &itemsMutex, &nextId, &fileName](const crow::request& request) {
-        auto body = crow::json::load(request.body);
+    //Protected functions, ran on 8080
+    if (!readOnlyMode) {
 
-        if (!body || !body.has("name")) {
-            crow::response response(400);
-            addCorsHeaders(response);
-            response.body = "Missing required field: name";
-            return response;
-        }
+        CROW_ROUTE(app, "/items").methods(crow::HTTPMethod::POST)([&items, &itemsMutex, &nextId, &fileName](const crow::request& request) {
+            auto body = crow::json::load(request.body);
 
-        Item newItem;
-        
-        newItem.name = body["name"].s();
-        newItem.quantity = body.has("quantity") ? std::string(body["quantity"].s()) : "";
-        newItem.category = body.has("category") ? std::string(body["category"].s()) : "";
-        newItem.status = body.has("status") ? std::string(body["status"].s()) : "needed";
-
-        {
-            std::lock_guard<std::mutex> lock(itemsMutex);
-            newItem.id = nextId++;
-            items.push_back(newItem);
-            saveItemsToFile(fileName, items);
-        }
-
-        crow::json::wvalue json = itemToJson(newItem);
-
-        crow::response response(201);
-        response.set_header("Content-Type", "application/json");
- 
-        response.body = json.dump();
-
-        return response;
-            });
-
-    CROW_ROUTE(app, "/items/<int>/status").methods(crow::HTTPMethod::PATCH) ([&items, &itemsMutex, &fileName](const crow::request& request, int id) {
-        auto body = crow::json::load(request.body);
-
-        if (!body || !body.has("status")) {
-            crow::response response(400);
-            response.body = "Missing required field: status";
-            return response;
-        }
-
-        std::string newStatus = body["status"].s();
-
-        std::lock_guard<std::mutex> lock(itemsMutex);
-
-        for (Item& item : items) {
-            if (item.id == id) {
-                item.status = newStatus;
-                saveItemsToFile(fileName, items);
-
-                crow::json::wvalue json = itemToJson(item);
-
-                crow::response response(200);
-                response.set_header("Content-Type", "application/json");
-                response.body = json.dump();
-
-                return response;
-            }
-        }
-
-        crow::response response(404);
-        response.body = "Item not found";
-
-        return response;
-            });
-
-    CROW_ROUTE(app, "/items/<int>/quantity").methods(crow::HTTPMethod::PATCH)
-        ([&items, &itemsMutex, &fileName](const crow::request& request, int id) {
-        auto body = crow::json::load(request.body);
-
-        if (!body || !body.has("quantity")) {
-            crow::response response(400);
-            addCorsHeaders(response);
-            response.body = "Missing required field: quantity";
-            return response;
-        }
-
-        std::string newQuantity = body["quantity"].s();
-
-        std::lock_guard<std::mutex> lock(itemsMutex);
-
-        for (Item& item : items) {
-            if (item.id == id) {
-                item.quantity = newQuantity;
-
-                saveItemsToFile(fileName, items);
-
-                crow::json::wvalue json = itemToJson(item);
-
-                crow::response response(200);
-                response.set_header("Content-Type", "application/json");
+            if (!body || !body.has("name")) {
+                crow::response response(400);
                 addCorsHeaders(response);
-                response.body = json.dump();
-
+                response.body = "Missing required field: name";
                 return response;
             }
-        }
 
-        crow::response response(404);      
-        response.body = "Item not found";
-        return response;
+            Item newItem;
+
+            newItem.name = body["name"].s();
+            newItem.quantity = body.has("quantity") ? std::string(body["quantity"].s()) : "";
+            newItem.category = body.has("category") ? std::string(body["category"].s()) : "";
+            newItem.status = body.has("status") ? std::string(body["status"].s()) : "needed";
+
+            {
+                std::lock_guard<std::mutex> lock(itemsMutex);
+                newItem.id = nextId++;
+                items.push_back(newItem);
+                saveItemsToFile(fileName, items);
+            }
+
+            crow::json::wvalue json = itemToJson(newItem);
+
+            crow::response response(201);
+            response.set_header("Content-Type", "application/json");
+
+            response.body = json.dump();
+
+            return response;
             });
 
-    CROW_ROUTE(app, "/items/<int>").methods(crow::HTTPMethod::DELETE)([&items, &itemsMutex, &fileName](int id) {
-        std::lock_guard<std::mutex> lock(itemsMutex);
+        CROW_ROUTE(app, "/items/<int>/status").methods(crow::HTTPMethod::PATCH) ([&items, &itemsMutex, &fileName](const crow::request& request, int id) {
+            auto body = crow::json::load(request.body);
 
-        auto itemPosition = std::find_if(items.begin(), items.end(),
-            [id](const Item& item) {
-                return item.id == id;
+            if (!body || !body.has("status")) {
+                crow::response response(400);
+                response.body = "Missing required field: status";
+                return response;
             }
-        );
 
-        if (itemPosition == items.end()) {
+            std::string newStatus = body["status"].s();
+
+            std::lock_guard<std::mutex> lock(itemsMutex);
+
+            for (Item& item : items) {
+                if (item.id == id) {
+                    item.status = newStatus;
+                    saveItemsToFile(fileName, items);
+
+                    crow::json::wvalue json = itemToJson(item);
+
+                    crow::response response(200);
+                    response.set_header("Content-Type", "application/json");
+                    response.body = json.dump();
+
+                    return response;
+                }
+            }
+
+            crow::response response(404);
+            response.body = "Item not found";
+
+            return response;
+            });
+
+        CROW_ROUTE(app, "/items/<int>/quantity").methods(crow::HTTPMethod::PATCH)
+            ([&items, &itemsMutex, &fileName](const crow::request& request, int id) {
+            auto body = crow::json::load(request.body);
+
+            if (!body || !body.has("quantity")) {
+                crow::response response(400);
+                addCorsHeaders(response);
+                response.body = "Missing required field: quantity";
+                return response;
+            }
+
+            std::string newQuantity = body["quantity"].s();
+
+            std::lock_guard<std::mutex> lock(itemsMutex);
+
+            for (Item& item : items) {
+                if (item.id == id) {
+                    item.quantity = newQuantity;
+
+                    saveItemsToFile(fileName, items);
+
+                    crow::json::wvalue json = itemToJson(item);
+
+                    crow::response response(200);
+                    response.set_header("Content-Type", "application/json");
+                    addCorsHeaders(response);
+                    response.body = json.dump();
+
+                    return response;
+                }
+            }
+
             crow::response response(404);
             response.body = "Item not found";
             return response;
-        }
+                });
 
-        items.erase(itemPosition);
-        saveItemsToFile(fileName, items);
+        CROW_ROUTE(app, "/items/<int>").methods(crow::HTTPMethod::DELETE)([&items, &itemsMutex, &fileName](int id) {
+            std::lock_guard<std::mutex> lock(itemsMutex);
 
-        crow::json::wvalue json;
-        json["message"] = "Item deleted";
-        json["id"] = id;
+            auto itemPosition = std::find_if(items.begin(), items.end(),
+                [id](const Item& item) {
+                    return item.id == id;
+                }
+            );
 
-        crow::response response(200);
-        response.set_header("Content-Type", "application/json");
-        response.body = json.dump();
+            if (itemPosition == items.end()) {
+                crow::response response(404);
+                response.body = "Item not found";
+                return response;
+            }
 
-        return response;
+            items.erase(itemPosition);
+            saveItemsToFile(fileName, items);
+
+            crow::json::wvalue json;
+            json["message"] = "Item deleted";
+            json["id"] = id;
+
+            crow::response response(200);
+            response.set_header("Content-Type", "application/json");
+            response.body = json.dump();
+
+            return response;
             });
+    };
 
 
 
 
-
-    app.port(8080).run();
+    app.port(portNumber).run();
 
     return 0;
 }
